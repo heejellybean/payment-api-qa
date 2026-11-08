@@ -12,7 +12,7 @@ Postman Collection으로 작성, newman으로 실행
 
 - 케이스 18개, 요청 29건 (정리 단계 반복 포함), 검증 58개 전체 통과
 - 실행 후 정리 단계에서 결제 4건 중 잔액이 남은 2건 전액취소
-- 실행마다 `reports/index.html`(요청별 응답과 검증 결과), `reports/summary.md`(요약 표) 생성
+- 실행마다 `reports/index.html`(PASS, FAIL 탭별 검증 결과), `reports/summary.md`(요약 표) 생성
 
 ## 케이스
 
@@ -44,7 +44,7 @@ Postman Collection으로 작성, newman으로 실행
 api/
   toss-payments.postman_collection.json   케이스 (폴더 01~05, 99 정리)
   environments/toss-test.postman_environment.json   주소, 테스트 카드 정보
-  judge.py                                 결과 판정, 요약 생성
+  judge.py                                 결과 판정, 요약과 HTML 리포트 생성
 scripts/run-api-tests.sh                   npm test 실행 스크립트
 ```
 

@@ -15,16 +15,12 @@ npx newman run api/toss-payments.postman_collection.json \
   -e api/environments/toss-test.postman_environment.json \
   --env-var "secretKey=${TOSS_SECRET_KEY}" \
   --env-var "runId=${RUN_ID}" \
-  --reporters cli,json,htmlextra \
+  --reporters cli,json \
   --reporter-json-export test-results/newman-result.json \
-  --reporter-htmlextra-export reports/index.html \
-  --reporter-htmlextra-title "Toss Payments API Test (${RUN_ID})" \
-  --reporter-htmlextra-skipHeaders "Authorization" \
-  --reporter-htmlextra-skipEnvironmentVars "secretKey" \
   --delay-request 200
 NEWMAN_EXIT=$?
 
-python3 api/judge.py test-results/newman-result.json --summary reports/summary.md
+python3 api/judge.py test-results/newman-result.json --summary reports/summary.md --html reports/index.html
 JUDGE_EXIT=$?
 
 # 원본 JSON에는 인증 헤더가 남아 있어서 판정 후 지운다.
