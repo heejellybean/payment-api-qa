@@ -1,0 +1,7 @@
+node_modules/
+.env
+reports/
+test-results/
+__pycache__/
+.DS_Store
+docs/

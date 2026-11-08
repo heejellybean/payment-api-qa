@@ -1,0 +1,12 @@
+{
+  "name": "toss-payments-api-qa",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "bash scripts/run-api-tests.sh"
+  },
+  "devDependencies": {
+    "newman": "^6.2.3",
+    "newman-reporter-htmlextra": "^1.23.1"
+  }
+}

@@ -1,0 +1,970 @@
+{
+  "info": {
+    "name": "Toss Payments API QA",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "{{secretKey}}",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// 주문번호 qa-{runId}-{케이스ID}에 쓰는 실행 ID",
+          "if (!pm.variables.get(\"runId\")) {",
+          "  pm.variables.set(\"runId\", Date.now().toString(36) + Math.random().toString(36).slice(2, 6));",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// 새로 만든 결제를 기록해 두고 99 정리 폴더에서 취소한다.",
+          "if (pm.request.method === \"POST\" && pm.response.code === 200) {",
+          "  let res = null;",
+          "  try { res = pm.response.json(); } catch (e) {}",
+          "  if (res && res.paymentKey) {",
+          "    const keys = JSON.parse(pm.variables.get(\"createdPaymentKeys\") || \"[]\");",
+          "    if (!keys.includes(res.paymentKey)) {",
+          "      keys.push(res.paymentKey);",
+          "      pm.variables.set(\"createdPaymentKeys\", JSON.stringify(keys));",
+          "    }",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 인증, 조회 오류",
+      "item": [
+        {
+          "name": "AUTH-01 잘못된 시크릿 키",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"AUTH-01 HTTP 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"AUTH-01 에러 코드 UNAUTHORIZED_KEY\", () => pm.expect(res.code).to.eql(\"UNAUTHORIZED_KEY\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/payments/orders/qa-{{runId}}-AUTH-01",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "test_sk_invalid_key_for_qa_00000000",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "AUTH-02 없는 결제 조회",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"AUTH-02 HTTP 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"AUTH-02 에러 코드 NOT_FOUND_PAYMENT\", () => pm.expect(res.code).to.eql(\"NOT_FOUND_PAYMENT\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/payments/qa-not-exist-{{runId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 결제",
+      "item": [
+        {
+          "name": "PAY-01 키인 결제",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"PAY-01 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"PAY-01 상태 DONE\", () => pm.expect(res.status).to.eql(\"DONE\"));",
+                  "pm.test(\"PAY-01 총액, 잔액 10,000\", () => {",
+                  "  pm.expect(res.totalAmount).to.eql(10000);",
+                  "  pm.expect(res.balanceAmount).to.eql(10000);",
+                  "});",
+                  "pm.test(\"PAY-01 주문번호가 요청 값과 같음\", () =>",
+                  "  pm.expect(res.orderId).to.eql(\"qa-\" + pm.variables.get(\"runId\") + \"-PAY-01\"));",
+                  "pm.variables.set(\"payKey\", res.paymentKey);",
+                  "pm.variables.set(\"payOrderId\", res.orderId);",
+                  "pm.variables.set(\"payMethod\", res.method);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/key-in",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10000,\n  \"orderId\": \"qa-{{runId}}-PAY-01\",\n  \"orderName\": \"QA 자동화 키인 결제\",\n  \"cardNumber\": \"{{testCardNumber}}\",\n  \"cardExpirationYear\": \"{{cardExpirationYear}}\",\n  \"cardExpirationMonth\": \"{{cardExpirationMonth}}\",\n  \"customerIdentityNumber\": \"{{customerIdentityNumber}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PAY-02 paymentKey로 조회",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"PAY-02 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"PAY-02 PAY-01 결제와 값이 일치\", () => {",
+                  "  pm.expect(res.paymentKey).to.eql(pm.variables.get(\"payKey\"));",
+                  "  pm.expect(res.orderId).to.eql(pm.variables.get(\"payOrderId\"));",
+                  "  pm.expect(res.method).to.eql(pm.variables.get(\"payMethod\"));",
+                  "  pm.expect(res.status).to.eql(\"DONE\");",
+                  "  pm.expect(res.totalAmount).to.eql(10000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}"
+          }
+        },
+        {
+          "name": "PAY-03 orderId로 조회",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"PAY-03 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"PAY-03 같은 paymentKey 조회\", () =>",
+                  "  pm.expect(res.paymentKey).to.eql(pm.variables.get(\"payKey\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/payments/orders/{{payOrderId}}"
+          }
+        },
+        {
+          "name": "PAY-04 같은 주문번호로 다시 결제",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"PAY-04 HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"PAY-04 에러 코드 DUPLICATED_ORDER_ID\", () => pm.expect(res.code).to.eql(\"DUPLICATED_ORDER_ID\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/key-in",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10000,\n  \"orderId\": \"qa-{{runId}}-PAY-01\",\n  \"orderName\": \"QA 자동화 키인 결제\",\n  \"cardNumber\": \"{{testCardNumber}}\",\n  \"cardExpirationYear\": \"{{cardExpirationYear}}\",\n  \"cardExpirationMonth\": \"{{cardExpirationMonth}}\",\n  \"customerIdentityNumber\": \"{{customerIdentityNumber}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 취소",
+      "item": [
+        {
+          "name": "CAN-01 3,000원 부분취소",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-01 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CAN-01 상태 PARTIAL_CANCELED\", () => pm.expect(res.status).to.eql(\"PARTIAL_CANCELED\"));",
+                  "pm.test(\"CAN-01 잔액 7,000\", () => pm.expect(res.balanceAmount).to.eql(7000));",
+                  "pm.test(\"CAN-01 취소 내역 1건, 금액 3,000\", () => {",
+                  "  pm.expect(res.cancels).to.have.lengthOf(1);",
+                  "  pm.expect(res.cancels[0].cancelAmount).to.eql(3000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\",\n  \"cancelAmount\": 3000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "CAN-02 2,000원 추가 부분취소",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-02 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CAN-02 잔액 5,000\", () => pm.expect(res.balanceAmount).to.eql(5000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\",\n  \"cancelAmount\": 2000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "CAN-02 재조회로 취소 합계 검증",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-02 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CAN-02 조회 결과 잔액 5,000, 취소 내역 2건\", () => {",
+                  "  pm.expect(res.balanceAmount).to.eql(5000);",
+                  "  pm.expect(res.cancels).to.have.lengthOf(2);",
+                  "});",
+                  "pm.test(\"CAN-02 취소 합계 + 잔액 = 최초 결제 금액\", () => {",
+                  "  const canceled = res.cancels.reduce((sum, c) => sum + c.cancelAmount, 0);",
+                  "  pm.expect(canceled + res.balanceAmount).to.eql(res.totalAmount);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}"
+          }
+        },
+        {
+          "name": "CAN-03 잔액보다 큰 금액 취소",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-03 HTTP 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"CAN-03 에러 코드 NOT_CANCELABLE_AMOUNT\", () => pm.expect(res.code).to.eql(\"NOT_CANCELABLE_AMOUNT\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\",\n  \"cancelAmount\": 6000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "CAN-03 잔액 변화 없음 확인",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-03 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CAN-03 실패한 취소 뒤에도 잔액 5,000, 취소 내역 2건\", () => {",
+                  "  pm.expect(res.balanceAmount).to.eql(5000);",
+                  "  pm.expect(res.cancels).to.have.lengthOf(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}"
+          }
+        },
+        {
+          "name": "CAN-04 멱등키로 1,000원 취소 (1차)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-04 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CAN-04 잔액 4,000, 취소 내역 3건\", () => {",
+                  "  pm.expect(res.balanceAmount).to.eql(4000);",
+                  "  pm.expect(res.cancels).to.have.lengthOf(3);",
+                  "});",
+                  "pm.variables.set(\"can04TxKey\", res.cancels[res.cancels.length - 1].transactionKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "qa-{{runId}}-CAN-04"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\",\n  \"cancelAmount\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "CAN-04 같은 멱등키로 다시 요청 (2차)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-04 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CAN-04 1차와 같은 응답\", () => {",
+                  "  pm.expect(res.balanceAmount).to.eql(4000);",
+                  "  pm.expect(res.cancels).to.have.lengthOf(3);",
+                  "  pm.expect(res.cancels[res.cancels.length - 1].transactionKey)",
+                  "    .to.eql(pm.variables.get(\"can04TxKey\"));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "qa-{{runId}}-CAN-04"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\",\n  \"cancelAmount\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "CAN-04 재조회로 한 번만 반영됐는지 확인",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-04 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CAN-04 조회 결과 잔액 4,000, 취소 내역 3건\", () => {",
+                  "  pm.expect(res.balanceAmount).to.eql(4000);",
+                  "  pm.expect(res.cancels).to.have.lengthOf(3);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/payments/{{payKey}}"
+          }
+        },
+        {
+          "name": "CAN-05 준비: 전액취소용 결제",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-05 준비 결제 DONE\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(res.status).to.eql(\"DONE\");",
+                  "});",
+                  "pm.variables.set(\"can05Key\", res.paymentKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/key-in",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"orderId\": \"qa-{{runId}}-CAN-05\",\n  \"orderName\": \"QA 자동화 키인 결제\",\n  \"cardNumber\": \"{{testCardNumber}}\",\n  \"cardExpirationYear\": \"{{cardExpirationYear}}\",\n  \"cardExpirationMonth\": \"{{cardExpirationMonth}}\",\n  \"customerIdentityNumber\": \"{{customerIdentityNumber}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "CAN-05 전액취소",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-05 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CAN-05 상태 CANCELED, 잔액 0\", () => {",
+                  "  pm.expect(res.status).to.eql(\"CANCELED\");",
+                  "  pm.expect(res.balanceAmount).to.eql(0);",
+                  "});",
+                  "pm.test(\"CAN-05 취소 금액 5,000\", () =>",
+                  "  pm.expect(res.cancels[0].cancelAmount).to.eql(5000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{can05Key}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "CAN-06 이미 취소된 결제 재취소",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CAN-06 HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"CAN-06 에러 코드 ALREADY_CANCELED_PAYMENT\", () => pm.expect(res.code).to.eql(\"ALREADY_CANCELED_PAYMENT\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{can05Key}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 가상계좌",
+      "item": [
+        {
+          "name": "VA-01 가상계좌 발급",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"VA-01 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"VA-01 상태 WAITING_FOR_DEPOSIT\", () => pm.expect(res.status).to.eql(\"WAITING_FOR_DEPOSIT\"));",
+                  "pm.test(\"VA-01 계좌번호, 은행코드, 입금기한 존재\", () => {",
+                  "  pm.expect(res.virtualAccount.accountNumber).to.be.a(\"string\").and.not.empty;",
+                  "  pm.expect(res.virtualAccount.bankCode).to.be.a(\"string\").and.not.empty;",
+                  "  pm.expect(res.virtualAccount.dueDate).to.be.a(\"string\").and.not.empty;",
+                  "});",
+                  "pm.variables.set(\"vaKey\", res.paymentKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/virtual-accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10000,\n  \"orderId\": \"qa-{{runId}}-VA-01\",\n  \"orderName\": \"QA 자동화 가상계좌\",\n  \"customerName\": \"QA테스터\",\n  \"bank\": \"20\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "VA-02 입금 전 부분취소",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"VA-02 HTTP 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"VA-02 에러 코드 NOT_ALLOWED_PARTIAL_REFUND_WAITING_DEPOSIT\", () => pm.expect(res.code).to.eql(\"NOT_ALLOWED_PARTIAL_REFUND_WAITING_DEPOSIT\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{vaKey}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\",\n  \"cancelAmount\": 3000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "VA-03 입금 전 전액취소",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"VA-03 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"VA-03 상태 CANCELED\", () => pm.expect(res.status).to.eql(\"CANCELED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{vaKey}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 테스트 취소\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 빌링",
+      "item": [
+        {
+          "name": "BIL-01 빌링키 발급",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"BIL-01 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"BIL-01 빌링키 존재, 고객키 일치\", () => {",
+                  "  pm.expect(res.billingKey).to.be.a(\"string\").and.not.empty;",
+                  "  pm.expect(res.customerKey).to.eql(\"qa-\" + pm.variables.get(\"runId\") + \"-customer\");",
+                  "});",
+                  "pm.variables.set(\"billingKey\", res.billingKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/billing/authorizations/card",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerKey\": \"qa-{{runId}}-customer\",\n  \"cardNumber\": \"{{testCardNumber}}\",\n  \"cardExpirationYear\": \"{{cardExpirationYear}}\",\n  \"cardExpirationMonth\": \"{{cardExpirationMonth}}\",\n  \"customerIdentityNumber\": \"{{customerIdentityNumber}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "BIL-02 빌링키로 자동결제",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"BIL-02 HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"BIL-02 상태 DONE, 금액 4,900\", () => {",
+                  "  pm.expect(res.status).to.eql(\"DONE\");",
+                  "  pm.expect(res.totalAmount).to.eql(4900);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/billing/{{billingKey}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerKey\": \"qa-{{runId}}-customer\",\n  \"amount\": 4900,\n  \"orderId\": \"qa-{{runId}}-BIL-02\",\n  \"orderName\": \"QA 자동화 정기결제\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "BIL-03 다른 고객키로 자동결제",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"BIL-03 HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"BIL-03 에러 코드 NOT_MATCHES_CUSTOMER_KEY\", () => pm.expect(res.code).to.eql(\"NOT_MATCHES_CUSTOMER_KEY\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/billing/{{billingKey}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerKey\": \"qa-{{runId}}-other-customer\",\n  \"amount\": 4900,\n  \"orderId\": \"qa-{{runId}}-BIL-03\",\n  \"orderName\": \"QA 자동화 정기결제\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "99 정리",
+      "item": [
+        {
+          "name": "CLEAN-01 정리 대상 조회",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get(\"cleanQueue\")) {",
+                  "  pm.variables.set(\"cleanQueue\", pm.variables.get(\"createdPaymentKeys\") || \"[]\");",
+                  "}",
+                  "const queue = JSON.parse(pm.variables.get(\"cleanQueue\"));",
+                  "pm.variables.set(\"cleanKey\", queue.length ? queue[0] : \"none\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const queue = JSON.parse(pm.variables.get(\"cleanQueue\"));",
+                  "if (queue.length === 0) {",
+                  "  pm.test(\"CLEAN 이번 실행에서 만든 결제 없음\", () => pm.expect(queue).to.be.empty);",
+                  "  pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"CLEAN 정리 대상 조회 성공\", () => pm.response.to.have.status(200));",
+                  "  const cancelable = [\"DONE\", \"PARTIAL_CANCELED\", \"WAITING_FOR_DEPOSIT\"].includes(res.status)",
+                  "    && res.balanceAmount > 0;",
+                  "  if (cancelable) {",
+                  "    pm.execution.setNextRequest(\"CLEAN-02 남은 금액 전액취소\");",
+                  "  } else {",
+                  "    queue.shift();",
+                  "    pm.variables.set(\"cleanQueue\", JSON.stringify(queue));",
+                  "    pm.execution.setNextRequest(queue.length ? \"CLEAN-01 정리 대상 조회\" : null);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/payments/{{cleanKey}}"
+          }
+        },
+        {
+          "name": "CLEAN-02 남은 금액 전액취소",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test(\"CLEAN 남은 금액 취소 후 잔액 0\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(res.balanceAmount).to.eql(0);",
+                  "});",
+                  "const queue = JSON.parse(pm.variables.get(\"cleanQueue\"));",
+                  "queue.shift();",
+                  "pm.variables.set(\"cleanQueue\", JSON.stringify(queue));",
+                  "if (queue.length) pm.execution.setNextRequest(\"CLEAN-01 정리 대상 조회\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/payments/{{cleanKey}}/cancel",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancelReason\": \"QA 자동화 실행 후 정리\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
