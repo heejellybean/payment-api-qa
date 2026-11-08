@@ -2,13 +2,16 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-TOSS_SECRET_KEY="$(grep -E '^TOSS_SECRET_KEY=' .env 2>/dev/null | cut -d= -f2-)"
+# CI는 Secrets 환경 변수, 로컬은 .env
+if [ -z "${TOSS_SECRET_KEY:-}" ]; then
+  TOSS_SECRET_KEY="$(grep -E '^TOSS_SECRET_KEY=' .env 2>/dev/null | cut -d= -f2-)"
+fi
 case "${TOSS_SECRET_KEY:-}" in
   test_sk_*|test_gsk_*) ;;
-  *) echo ".env의 TOSS_SECRET_KEY에 테스트 시크릿 키를 넣어 주세요." >&2; exit 2 ;;
+  *) echo "TOSS_SECRET_KEY에 테스트 시크릿 키를 넣어 주세요." >&2; exit 2 ;;
 esac
 
-RUN_ID="local$(date +%y%m%d%H%M%S)"
+RUN_ID="${RUN_ID:-local$(date +%y%m%d%H%M%S)}"
 mkdir -p reports test-results
 
 npx newman run api/toss-payments.postman_collection.json \

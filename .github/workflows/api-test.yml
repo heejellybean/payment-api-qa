@@ -1,0 +1,56 @@
+name: API Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 21,9 * * *" # 06:00, 18:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run API tests
+        env:
+          TOSS_SECRET_KEY: ${{ secrets.TOSS_SECRET_KEY }}
+          RUN_ID: gh${{ github.run_id }}
+        run: npm test
+
+      - name: Job summary
+        if: always()
+        run: cat reports/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload report
+        if: always() && hashFiles('reports/index.html') != '' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: reports/
+
+  deploy-report:
+    needs: api-test
+    if: always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

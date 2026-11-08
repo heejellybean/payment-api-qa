@@ -2,17 +2,19 @@
 
 토스페이먼츠 API를 테스트 모드로 호출해 결제, 취소, 가상계좌, 빌링 흐름 검증
 
-Postman Collection으로 작성, newman으로 실행
+Postman Collection으로 작성, GitHub Actions에서 newman으로 매일 2회 실행
 
 토스페이먼츠 공식 프로젝트가 아닌 개인 프로젝트이며 테스트 키만 사용
 
 ## 결과
 
-로컬 실행 기준 (2026-11-09)
+- 결제, 취소, 가상계좌, 빌링 API 케이스 18개를 Postman Collection으로 자동화
+- GitHub Actions로 매일 06:00, 18:00(KST)와 코드 변경 시 전체 케이스 자동 실행
+- 실행마다 테스트가 만든 결제를 자동 정리해, 사람 손 없이 반복 실행 가능
+- 실행 결과를 리포트(PASS, FAIL 탭)로 자동 게시, 실패 시 실패한 검증 항목과 실제 값 확인 가능
+- 로컬과 CI에서 같은 명령(`npm test`)으로 실행
 
-- 케이스 18개, 요청 29건 (정리 단계 반복 포함), 검증 58개 전체 통과
-- 실행 후 정리 단계에서 결제 4건 중 잔액이 남은 2건 전액취소
-- 실행마다 `reports/index.html`(PASS, FAIL 탭별 검증 결과), `reports/summary.md`(요약 표) 생성
+[최근 리포트](https://heejellybean.github.io/payment-api-qa/) / [실행 기록](https://github.com/heejellybean/payment-api-qa/actions/workflows/api-test.yml)
 
 ## 케이스
 
@@ -46,6 +48,7 @@ api/
   environments/toss-test.postman_environment.json   주소, 테스트 카드 정보
   judge.py                                 결과 판정, 요약과 HTML 리포트 생성
 scripts/run-api-tests.sh                   npm test 실행 스크립트
+.github/workflows/api-test.yml             CI 설정
 ```
 
 ## 실행
@@ -59,3 +62,5 @@ npm install
 cp .env.example .env   # TOSS_SECRET_KEY 입력
 npm test
 ```
+
+GitHub Actions에서 실행하려면 포크한 저장소의 Secrets에 `TOSS_SECRET_KEY` 추가 후 Actions 탭에서 Run workflow
